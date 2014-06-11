@@ -1,0 +1,4 @@
+# ignore everthing
+/*.pyc
+
+# But not these files in below...
