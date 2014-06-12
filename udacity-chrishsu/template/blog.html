@@ -1,0 +1,22 @@
+{% extends  "blog_base.html" %}
+
+{% block content %}
+<div id="content">
+  {% for blog in blogs %}
+  <div class="post">
+    <div class="post-heading">
+      <a href="/blog/{{ blog.key().id() }}" class="post-title">
+        {{ blog.subject }}
+      </a>
+      <div class="post-date">
+       {{ blog.created }}
+      </div>
+    </div>
+    <div class="post-content">
+      {{ blog.content }}
+    </div>
+  </div>
+  <br><br>
+  {% endfor %}
+</div>
+{% endblock %}

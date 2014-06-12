@@ -39,12 +39,15 @@ class Art(db.Model):
   art     = db.TextProperty( required = True )
   created = db.DateTimeProperty( auto_now_add = True )
 
-
+class Blog( db.Model ):
+  subject = db.StringProperty( required = True )
+  content = db.TextProperty( required = True )
+  created = db.DateTimeProperty( auto_now_add = True )
 
 class MainHandler( Handler ):
   def render_ascii(self, title = "", art = "", error = ""):
     arts = db.GqlQuery("select * from Art order by created desc")
-    self.render( "ascii.html", title = title, art = art, error = error, arts = arts)
+    self.render( "ascii.html", title = title, art = art, error = error, arts = arts, ids = ids )
 
   def get(self):
     self.render_ascii()
@@ -61,6 +64,37 @@ class MainHandler( Handler ):
       error = "We need both a title and some artwork!!!"
       self.render_ascii( title, art , error )
 
+class BlogHandler( Handler ):
+  def render_blog(self, blog_id = "" ):
+    if blog_id == "":
+      blogs = db.GqlQuery( "select * from Blog order by created desc" ) 
+      self.render( "blog.html", blogs = blogs )
+    else:
+      blog = Blog.get_by_id( long( blog_id ) )
+      self.render( "post.html", blog = blog )
+
+  def get(self, blog_id = ""):
+    self.render_blog( blog_id = blog_id )
+
+class NewPostHandler( Handler ):
+  def render_newpost(self, subject = "", content = "", error = "" ):
+    self.render( "newpost.html", subject = subject, content = content, error = error )
+  
+  def get( self ):
+    self.render_newpost()
+
+  def post( self ):
+    subject = self.request.get("subject")
+    content = self.request.get("content")
+
+    if subject and content:
+      newpost = Blog( subject = subject, content = content )
+      newpost.put()
+      self.redirect( "/blog/" + str( newpost.key().id() ) )
+    else:
+      error = "We need both subject and content for blog !!"
+      self.render_newpost( subject, content, error )
+
 class FizzBuzzHandler( Handler ):
   def get( self ):
     n = self.request.get("n", 0)
@@ -68,5 +102,9 @@ class FizzBuzzHandler( Handler ):
     self.render( "fizzbuzz.html", n = n )
 
 app = webapp2.WSGIApplication([
-    ('/', MainHandler), ( '/fizzbuzz', FizzBuzzHandler )
+    ( '/', MainHandler ), 
+    ( '/fizzbuzz', FizzBuzzHandler ),
+    ( '/blog', BlogHandler ),
+    ( '/blog/(\d+)', BlogHandler ),
+    ( '/blog/newpost', NewPostHandler )
 ], debug=True)
