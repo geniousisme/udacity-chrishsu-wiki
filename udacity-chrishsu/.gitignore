@@ -1,4 +1,4 @@
 # ignore everthing
-/*.pyc
+*.pyc
 
 # But not these files in below...
