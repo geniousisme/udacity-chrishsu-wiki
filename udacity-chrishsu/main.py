@@ -47,7 +47,7 @@ class Blog( db.Model ):
 class MainHandler( Handler ):
   def render_ascii(self, title = "", art = "", error = ""):
     arts = db.GqlQuery("select * from Art order by created desc")
-    self.render( "ascii.html", title = title, art = art, error = error, arts = arts, ids = ids )
+    self.render( "ascii.html", title = title, art = art, error = error, arts = arts )
 
   def get(self):
     self.render_ascii()
