@@ -8,11 +8,11 @@
         {{ blog.subject }}
       </a>
       <div class="post-date">
-       {{ blog.created }}
+       {{ blog.created.strftime("%b %d, %Y") }}
       </div>
     </div>
     <div class="post-content">
-      {{ blog.content }}
+      {{ blog.content | safe }}
     </div>
   </div>
   <br><br>
