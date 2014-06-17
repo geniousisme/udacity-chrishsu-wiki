@@ -173,16 +173,19 @@ class NewPostHandler( Handler ):
       self.render_newpost( subject, content, error )
 
 class SignUpHandler( Handler ):
-  def render_welcome( self, username = "" ):
-    self.render( "welcome.html", username=username )
-
   def render_signup( self, **kw ):
     self.render( "signup.html", **kw )
 
   def get( self ):
-    self.render_signup()
+    name = self.request.cookies.get('name')
+    if name:
+      self.redirect("/welcome")
+    else:
+      self.render_signup()
 
   def post( self, username = "", password = "", verify = "", email = "", invalid_username = "", invalid_password = "", invalid_verify = "", invalid_email = "" ):
+    self.response.headers['Content-Type'] = 'text/plain'
+    cookie_name = self.request.cookies.get('name')
     user_username = self.request.get("username")
     user_email    = self.request.get("email")
 
@@ -191,9 +194,11 @@ class SignUpHandler( Handler ):
     vVerify   = valid_password( self.request.get("verify") )
     vEmail    = valid_email( user_email )
     invalid_username_error = invalid_password_error = invalid_verify_error = invalid_email_error = ""
-    if not ( vUsername and vPassword and vVerify and vPassword == vVerify and vEmail is not None ):
+    if not ( vUsername and vPassword and vVerify and vPassword == vVerify and vEmail is not None and cookie_name ):
       if not vUsername:
         invalid_username_error = "That's not a valid username."
+      if not cookie_name:
+        invalid_username_error = "The username already existed."
       if not vPassword:
         invalid_password_error = "That wasn't a valid password."
       if vVerify != vPassword:
@@ -205,14 +210,14 @@ class SignUpHandler( Handler ):
                           invalid_username=invalid_username_error, invalid_password=invalid_password_error, 
                           invalid_verify=invalid_verify_error, invalid_email=invalid_email_error )
     else:
-      self.response.headers.add_header( 'Set-Cookie', 'name=%s' % new_cookie_val )
-      self.render_welcome( vUsername )
+      self.response.headers.add_header( 'Set-Cookie', 'name=%s' % str( vUsername ) )
+      self.redirect( "/welcome" )
 
-class  WelcomeHandler( Handler ):
+class WelcomeHandler( Handler ):
   def get( self ):
-    username = self.request.cookies.get('name')
-    if username:
-      self.render( "welcome.html", username=username )
+    name = self.request.cookies.get('name')
+    if name:
+      self.render( "welcome.html", username=name )
 
 class FizzBuzzHandler( Handler ):
   def get( self ):
