@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+ #!/usr/bin/env python
 #
 # Copyright 2007 Google Inc.
 #
@@ -17,6 +17,38 @@
 import webapp2
 import jinja2
 import os
+import hashlib
+import hmac
+import string
+
+SECRET = "lalalala"
+
+# def hash_str(s):
+#   return hashlib.md5(s).hexdigest()
+def hash_str(s):
+  return hmac.new(SECRET, s).hexdigest()
+
+def make_secure_val(s):
+  return s + '|' + hash_str(s)
+
+def check_secure_val(h):
+  h_s = h.split('|')[0]
+  return h_s if make_secure_val( h_s ) == h else None
+
+def make_salt():
+    return ''.join(random.choice(string.letters) for x in xrange(5))
+# Implement the function valid_pw() that returns True if a user's password 
+# matches its hash. You will need to modify make_pw_hash.
+
+def make_pw_hash(name, pw):
+    salt = make_salt()
+    h = hashlib.sha256(name + pw + salt).hexdigest()
+    return '%s,%s' % (h, salt)
+
+def valid_pw(name, pw, h):
+    ###Your code here
+    name_pw_salt, salt = h.split(',')
+    return name_pw_salt == hashlib.sha256(name + pw + salt).hexdigest() 
 
 from google.appengine.ext import db
 
@@ -59,12 +91,26 @@ class MainHandler( Handler ):
     self.render( "ascii.html", title = title, art = art, error = error, arts = arts )
 
   def get(self):
-    self.render_ascii()
+    self.response.headers['Content-Type'] = 'text/plain'
+    # visits = self.request.cookies.get('visits', 0) # get is the dictionary method, if we get the argument 'visit', then tae the value, else we take 0
+    visits = 0
+    visit_cookie_str = self.request.cookies.get('visits')
+    if visit_cookie_str:
+      cookie_val = check_secure_val( visit_cookie_str )
+      if cookie_val:
+        visits = int( cookie_val )
+    visits += 1
+    new_cookie_val = make_secure_val( str( visits ) )
+    self.response.headers.add_header( 'Set-Cookie', 'visits=%s' % new_cookie_val )
+    if visits >= 10000:
+      self.write("You are the best forever !!!!")
+    else:
+      self.write("You have been here for %s times!" % visits)
+    # self.render_ascii()
    
   def post(self):
     title = self.request.get("title")
     art   = self.request.get("art")
-
     if title and art:
       new_art = Art( title = title, art = art )
       new_art.put()
