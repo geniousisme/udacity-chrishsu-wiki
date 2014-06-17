@@ -17,9 +17,15 @@
 import webapp2
 import jinja2
 import os
+
+import random
+import string
 import hashlib
 import hmac
-import string
+
+
+
+####################### validate the pw for the 
 
 SECRET = "lalalala"
 
@@ -37,8 +43,6 @@ def check_secure_val(h):
 
 def make_salt():
     return ''.join(random.choice(string.letters) for x in xrange(5))
-# Implement the function valid_pw() that returns True if a user's password 
-# matches its hash. You will need to modify make_pw_hash.
 
 def make_pw_hash(name, pw):
     salt = make_salt()
@@ -46,9 +50,27 @@ def make_pw_hash(name, pw):
     return '%s,%s' % (h, salt)
 
 def valid_pw(name, pw, h):
-    ###Your code here
     name_pw_salt, salt = h.split(',')
-    return name_pw_salt == hashlib.sha256(name + pw + salt).hexdigest() 
+    return name_pw_salt == hashlib.sha256(name + pw + salt).hexdigest()
+
+####################### validate the user input for signing up
+
+import re
+
+def valid_username(username):
+  username_re = re.compile(r"^[a-zA-Z0-9_-]{3,20}$").match(username)
+  return username_re.group() if username_re is not None else None
+
+def valid_password(password):
+  password_re = re.compile(r"^.{3,20}$").match(password)
+  return password_re.group() if password_re is not None else None
+
+def valid_email(email):
+  if email == "":
+    return ""
+  email_re = re.compile(r"^[\S]+@[\S]+\.[\S]+$").match(email)
+  return email_re.group() if email_re is not None else None
+
 
 from google.appengine.ext import db
 
@@ -150,6 +172,48 @@ class NewPostHandler( Handler ):
       error = "We need both subject and content for blog !!"
       self.render_newpost( subject, content, error )
 
+class SignUpHandler( Handler ):
+  def render_welcome( self, username = "" ):
+    self.render( "welcome.html", username=username )
+
+  def render_signup( self, **kw ):
+    self.render( "signup.html", **kw )
+
+  def get( self ):
+    self.render_signup()
+
+  def post( self, username = "", password = "", verify = "", email = "", invalid_username = "", invalid_password = "", invalid_verify = "", invalid_email = "" ):
+    user_username = self.request.get("username")
+    user_email    = self.request.get("email")
+
+    vUsername = valid_username( user_username )
+    vPassword = valid_password( self.request.get("password") )
+    vVerify   = valid_password( self.request.get("verify") )
+    vEmail    = valid_email( user_email )
+    invalid_username_error = invalid_password_error = invalid_verify_error = invalid_email_error = ""
+    if not ( vUsername and vPassword and vVerify and vPassword == vVerify and vEmail is not None ):
+      if not vUsername:
+        invalid_username_error = "That's not a valid username."
+      if not vPassword:
+        invalid_password_error = "That wasn't a valid password."
+      if vVerify != vPassword:
+        invalid_verify_error   = "Your password didn't match."
+      if vEmail is None:
+        invalid_email_error    = "That's not a valid email."
+      
+      self.render_signup( username=user_username, password="", verify="", email=user_email, 
+                          invalid_username=invalid_username_error, invalid_password=invalid_password_error, 
+                          invalid_verify=invalid_verify_error, invalid_email=invalid_email_error )
+    else:
+      self.response.headers.add_header( 'Set-Cookie', 'name=%s' % new_cookie_val )
+      self.render_welcome( vUsername )
+
+class  WelcomeHandler( Handler ):
+  def get( self ):
+    username = self.request.cookies.get('name')
+    if username:
+      self.render( "welcome.html", username=username )
+
 class FizzBuzzHandler( Handler ):
   def get( self ):
     n = self.request.get("n", 0)
@@ -159,6 +223,10 @@ class FizzBuzzHandler( Handler ):
 app = webapp2.WSGIApplication([
     ( '/', MainHandler ), 
     ( '/fizzbuzz', FizzBuzzHandler ),
+    ( '/signup', SignUpHandler ),
+    ( '/welcome', WelcomeHandler ),
+    # ( '/login', LoginHandler ),
+    # ( '/logout', LogoutHandler ),
     ( '/blog', BlogHandler ),
     ( '/blog/(\d+)', BlogHandler ),
     ( '/blog/newpost', NewPostHandler )

@@ -7,7 +7,6 @@
   }
 </style>
 <h2>Sign Up la~</h2>
-<!-- <form action="" method="post"> -->
 <form method="post">
   <table>
     <tr>
@@ -15,9 +14,10 @@
         Username
       </td>
       <td>
-        <input type="text" name="username" value="">
+        <input type="text" name="username" value="{{ username }}">
       </td>
-      <td class="error">          
+      <td class="error">
+        {{invalid_username}}          
       </td>
     </tr>
     <tr>
@@ -25,9 +25,10 @@
         Password
       </td>
       <td>
-        <input type="password" name="password" value="">
+        <input type="password" name="password" value="{{password}}">
       </td>
       <td class="error">
+        {{invalid_password}} 
       </td>
     </tr>
     <tr>
@@ -35,9 +36,10 @@
         Verify Password
       </td>
       <td>
-        <input type="password" name="verify" value="">
+        <input type="password" name="verify" value="{{verify}}">
       </td>
       <td class="error">
+        {{invalid_verify}} 
       </td>
     </tr>
     <tr>
@@ -45,12 +47,12 @@
         Email (optional)
       </td>
       <td>
-        <input type="text" name="email" value="">
+        <input type="text" name="email" value="{{email}}">
       </td>
       <td class="error">
+        {{invalid_email}} 
       </td>
     </tr>
   </table>
   <input type="submit">
 </form>
-
