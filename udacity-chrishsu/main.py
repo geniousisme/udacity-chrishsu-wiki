@@ -23,8 +23,6 @@ import string
 import hashlib
 import hmac
 
-
-
 ####################### validate the pw for the 
 
 SECRET = "lalalala"
@@ -106,6 +104,11 @@ class Blog( db.Model ):
     self._render_text = self.content.replace('\n', '<br>')
     return render_str("post.html", p = self)
 
+class User( db.Model ):
+  username = db.StringProperty( required = True )
+  password = db.StringProperty( required = True )
+  email    = db.StringProperty()
+  created  = db.DateTimeProperty( auto_now_add = True )
 
 class MainHandler( Handler ):
   def render_ascii(self, title = "", art = "", error = ""):
@@ -174,50 +177,60 @@ class NewPostHandler( Handler ):
 
 class SignUpHandler( Handler ):
   def render_signup( self, **kw ):
+    self.response.delete_cookie('user_id', path="/")
     self.render( "signup.html", **kw )
 
   def get( self ):
-    name = self.request.cookies.get('name')
-    if name:
-      self.redirect("/welcome")
-    else:
-      self.render_signup()
+    self.render_signup()
+
+  def is_user_existed(self, username ):
+      return bool(User.all().filter('username =', username).get())
 
   def post( self, username = "", password = "", verify = "", email = "", invalid_username = "", invalid_password = "", invalid_verify = "", invalid_email = "" ):
-    self.response.headers['Content-Type'] = 'text/plain'
-    cookie_name = self.request.cookies.get('name')
+    # self.response.headers['Content-Type'] = 'text/plain
+    # if user_id_hash and check_secure_val( user_id_hash ):
+    #   user_id = long( user_id_hash.split('|')[0] )
+    #   now_username = User.get_by_id( user_id ).username
     user_username = self.request.get("username")
     user_email    = self.request.get("email")
-
     vUsername = valid_username( user_username )
     vPassword = valid_password( self.request.get("password") )
     vVerify   = valid_password( self.request.get("verify") )
     vEmail    = valid_email( user_email )
     invalid_username_error = invalid_password_error = invalid_verify_error = invalid_email_error = ""
-    if not ( vUsername and vPassword and vVerify and vPassword == vVerify and vEmail is not None and cookie_name ):
+    if not ( vUsername and vPassword and vVerify and vPassword == vVerify and vEmail is not None and not self.is_user_existed( vUsername ) ):
       if not vUsername:
         invalid_username_error = "That's not a valid username."
-      if not cookie_name:
-        invalid_username_error = "The username already existed."
+      if self.is_user_existed( vUsername ):
+        invalid_username_error = "username already existed."
       if not vPassword:
         invalid_password_error = "That wasn't a valid password."
       if vVerify != vPassword:
         invalid_verify_error   = "Your password didn't match."
       if vEmail is None:
         invalid_email_error    = "That's not a valid email."
-      
       self.render_signup( username=user_username, password="", verify="", email=user_email, 
                           invalid_username=invalid_username_error, invalid_password=invalid_password_error, 
                           invalid_verify=invalid_verify_error, invalid_email=invalid_email_error )
     else:
-      self.response.headers.add_header( 'Set-Cookie', 'name=%s' % str( vUsername ) )
+      new_user = User( username=vUsername, password=make_pw_hash( vUsername, vPassword ), email=vEmail )
+      new_user.put()
+      secure_user_id = make_secure_val( str( new_user.key().id() ) )
+      self.response.headers.add_header( 'Set-Cookie', 'user_id=%s' % secure_user_id )
+      # self.response.headers.add_header( 'Set-Cookie', 'user_id=%s;Path=/signup' % secure_user_id )
+      # self.response.headers.add_header( 'Set-Cookie', 'user_id=%s;Path=/welcome' % secure_user_id )
       self.redirect( "/welcome" )
+
+class LoginHandler( Handler )
 
 class WelcomeHandler( Handler ):
   def get( self ):
-    name = self.request.cookies.get('name')
-    if name:
-      self.render( "welcome.html", username=name )
+    user_id_hash = self.request.cookies.get('user_id')
+    if user_id_hash and check_secure_val( user_id_hash ):
+      user_id = long( user_id_hash.split('|')[0] )
+      self.render( "welcome.html", username = User.get_by_id( user_id ).username )
+    else:
+      self.redirect( "/signup" )
 
 class FizzBuzzHandler( Handler ):
   def get( self ):
@@ -230,7 +243,7 @@ app = webapp2.WSGIApplication([
     ( '/fizzbuzz', FizzBuzzHandler ),
     ( '/signup', SignUpHandler ),
     ( '/welcome', WelcomeHandler ),
-    # ( '/login', LoginHandler ),
+    ( '/login', LoginHandler ),
     # ( '/logout', LogoutHandler ),
     ( '/blog', BlogHandler ),
     ( '/blog/(\d+)', BlogHandler ),
