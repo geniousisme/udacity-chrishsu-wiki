@@ -47,7 +47,7 @@ def make_pw_hash(name, pw):
     h = hashlib.sha256(name + pw + salt).hexdigest()
     return '%s,%s' % (h, salt)
 
-def valid_pw(name, pw, h):
+def check_valid_pw(name, pw, h):
     name_pw_salt, salt = h.split(',')
     return name_pw_salt == hashlib.sha256(name + pw + salt).hexdigest()
 
@@ -109,6 +109,28 @@ class User( db.Model ):
   password = db.StringProperty( required = True )
   email    = db.StringProperty()
   created  = db.DateTimeProperty( auto_now_add = True )
+
+  @classmethod
+  def find_by_name(cls, username):
+    return User.all().filter('username =', username).get()
+      
+  
+  # def find_by_name(self, username):
+  #   return self.all().filter('username =', username).get() #user_obj or None
+
+  # def login( self, in_username, in_password ):
+  #   user = User.find_by_name( in_username )
+  #   if not user: 
+  #     new_user = User( username=in_username, password=make_pw_hash( in_username, in_password ), email="" )
+  #     new_user.put()
+  #     secure_user_id = make_secure_val( str( new_user.key().id() ) )
+  #     Handler.response.headers.add_header( 'Set-Cookie', 'user_id=%s' % secure_user_id )
+  #     Handler.redirect( "/welcome", username=in_username )
+  #   else:
+  #     if check_valid_pw( in_username, in_password, user.password ):
+  #       Handler.redirect( "/welcome", username=in_username )
+  #     else:
+  #       Handler.render("login.html", invalid_login="invalid_login")      
 
 class MainHandler( Handler ):
   def render_ascii(self, title = "", art = "", error = ""):
@@ -177,10 +199,10 @@ class NewPostHandler( Handler ):
 
 class SignUpHandler( Handler ):
   def render_signup( self, **kw ):
-    self.response.delete_cookie('user_id', path="/")
     self.render( "signup.html", **kw )
 
   def get( self ):
+    # self.response.out.write( [ str(user.username) for user in User.all() ] )
     self.render_signup()
 
   def is_user_existed(self, username ):
@@ -221,16 +243,62 @@ class SignUpHandler( Handler ):
       # self.response.headers.add_header( 'Set-Cookie', 'user_id=%s;Path=/welcome' % secure_user_id )
       self.redirect( "/welcome" )
 
-class LoginHandler( Handler )
+class LoginHandler( Handler ):
+  def render_login( self, **kw ):
+    self.render( "login.html", **kw )
+  
+  def get( self ):
+    # self.response.out.write( [ str(user.username) for user in User.all() ] )
+    self.render_login()
+
+  def post( self ):
+    username = valid_username( self.request.get("username") )
+    password = valid_password( self.request.get("password") )
+    invalid_username = invalid_password = ""
+    if not( username and password ):
+      if not username:
+        invalid_username = "That's not a valid username."
+      if not password:
+        invalid_password = "That's not a valid password."
+      self.render( "login.html", username="", password="", invalid_username=invalid_username, invalid_password=invalid_password )
+    else:
+      self.login( username, password )
+  
+  def login( self, in_username, in_password ):
+    user = User.find_by_name( in_username )
+    if not user: 
+      # new_user = User( username=in_username, password=make_pw_hash( in_username, in_password ), email="" )
+      # new_user.put()
+      # secure_user_id = make_secure_val( str( new_user.key().id() ) )
+      # self.response.headers.add_header( 'Set-Cookie', 'user_id=%s' % secure_user_id )
+      self.render("login.html", invalid_login="invalid login")
+    else:
+      if check_valid_pw( in_username, in_password, user.password ):
+        secure_user_id = make_secure_val( str( User.find_by_name( in_username ).key().id() ) )
+        self.response.headers.add_header( 'Set-Cookie', 'user_id=%s' % secure_user_id )
+        self.redirect( "/welcome" )
+      else:
+        self.render("login.html", invalid_login="invalid login")      
+class LogoutHandler( Handler ):
+  def get( self ):
+    if self.request.cookies.get('user_id'):
+      # self.response.delete_cookie('user_id')
+      self.response.headers.add_header( 'Set-Cookie', 'user_id=;Path=/' )#self.response.set_cookie('user_id', 'value=', path='/')
+    self.redirect("/signup")
+
 
 class WelcomeHandler( Handler ):
+  def render_welcome( self, **kw ):
+    self.render( "welcome.html", **kw )
+  
   def get( self ):
     user_id_hash = self.request.cookies.get('user_id')
     if user_id_hash and check_secure_val( user_id_hash ):
       user_id = long( user_id_hash.split('|')[0] )
-      self.render( "welcome.html", username = User.get_by_id( user_id ).username )
+      self.render_welcome( username = User.get_by_id( user_id ).username )
     else:
-      self.redirect( "/signup" )
+      # self.redirect( "/signup" )
+      self.redirect( "/login" )
 
 class FizzBuzzHandler( Handler ):
   def get( self ):
@@ -244,7 +312,7 @@ app = webapp2.WSGIApplication([
     ( '/signup', SignUpHandler ),
     ( '/welcome', WelcomeHandler ),
     ( '/login', LoginHandler ),
-    # ( '/logout', LogoutHandler ),
+    ( '/logout', LogoutHandler ),
     ( '/blog', BlogHandler ),
     ( '/blog/(\d+)', BlogHandler ),
     ( '/blog/newpost', NewPostHandler )
