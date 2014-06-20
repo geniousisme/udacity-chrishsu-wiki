@@ -27,8 +27,6 @@ import hmac
 
 SECRET = "lalalala"
 
-# def hash_str(s):
-#   return hashlib.md5(s).hexdigest()
 def hash_str(s):
   return hmac.new(SECRET, s).hexdigest()
 
@@ -69,8 +67,32 @@ def valid_email(email):
   email_re = re.compile(r"^[\S]+@[\S]+\.[\S]+$").match(email)
   return email_re.group() if email_re is not None else None
 
+GMAPS_URL = "http://maps.googleapis.com/maps/api/staticmap?size=380x263&sensor=false"
 
+def gmaps_img(points):
+  marker_params = ''.join( ["&markers=" + str(point.lat) + "," + str(point.lon) for point in points] )
+  return GMAPS_URL + marker_params
+
+import urllib2
+from xml.dom import minidom
 from google.appengine.ext import db
+
+IP_URL = "http://api.hostip.info/?ip="
+def get_coords(ip):
+  # ip = "4.2.2.2"
+  # ip = "23.24.209.41"
+  url = IP_URL + ip
+  content = None
+  try:
+    content = urllib2.urlopen(url).read()
+  except URLError:
+    return
+  if content:
+    d = minidom.parseString(content)
+    coords = d.getElementsByTagName('gml:coordinates')
+    if coords and coords[0].childNodes[0].nodeValue:
+      lon, lat = coords[0].childNodes[0].nodeValue.split(',')
+      return db.GeoPt( lat, lon )
 
 template_dir = os.path.join( os.path.dirname(__file__), "template" )
 jinja_env = jinja2.Environment( loader = jinja2.FileSystemLoader( template_dir ), autoescape = True )
@@ -89,6 +111,7 @@ class Handler(webapp2.RequestHandler):
 class Art(db.Model):
   title   = db.StringProperty( required = True )  
   art     = db.TextProperty( required = True )
+  coords  = db.GeoPtProperty()
   created = db.DateTimeProperty( auto_now_add = True )
 
 def blog_key(name = 'default'):
@@ -113,29 +136,8 @@ class User( db.Model ):
   @classmethod
   def find_by_name(cls, username):
     return User.all().filter('username =', username).get()
-      
   
-  # def find_by_name(self, username):
-  #   return self.all().filter('username =', username).get() #user_obj or None
-
-  # def login( self, in_username, in_password ):
-  #   user = User.find_by_name( in_username )
-  #   if not user: 
-  #     new_user = User( username=in_username, password=make_pw_hash( in_username, in_password ), email="" )
-  #     new_user.put()
-  #     secure_user_id = make_secure_val( str( new_user.key().id() ) )
-  #     Handler.response.headers.add_header( 'Set-Cookie', 'user_id=%s' % secure_user_id )
-  #     Handler.redirect( "/welcome", username=in_username )
-  #   else:
-  #     if check_valid_pw( in_username, in_password, user.password ):
-  #       Handler.redirect( "/welcome", username=in_username )
-  #     else:
-  #       Handler.render("login.html", invalid_login="invalid_login")      
-
 class MainHandler( Handler ):
-  def render_ascii(self, title = "", art = "", error = ""):
-    arts = db.GqlQuery("select * from Art order by created desc")
-    self.render( "ascii.html", title = title, art = art, error = error, arts = arts )
 
   def get(self):
     self.response.headers['Content-Type'] = 'text/plain'
@@ -165,6 +167,34 @@ class MainHandler( Handler ):
     else:
       error = "We need both a title and some artwork!!!"
       self.render_ascii( title, art , error )
+
+class AsciiHandler( Handler ):
+  def render_ascii(self, **kw):
+    # arts = db.GqlQuery("select * from Art where ancestor is :1 order by created desc limit 10")
+    self.render( "ascii.html", **kw )
+
+  def get( self ):
+    # self.write( repr( get_coords( self.request.remote_addr ) ) )
+    arts = list( db.GqlQuery("select * from Art order by created desc limit 10") )# actually , when the result is a cursor , if you cal it once, the cursor will 
+    # self.response.out.write( arts )
+    coords = filter( None, ( art.coords for art in arts ) )
+    # self.response.out.write( coords )
+    img_url = coords and gmaps_img( coords )
+    self.render_ascii( arts=arts, img_url=img_url )
+
+  def post( self ):
+    title = self.request.get("title")
+    art   = self.request.get("art")
+    if title and art:
+      new_art = Art( title=title, art=art )
+      coords  = get_coords( self.request.remote_addr )
+      new_art.coords = coords and coords 
+      new_art.put()
+      self.redirect("/ascii")
+    else:
+      error = "We need both a title and some artwork!!!"
+      arts = db.GqlQuery("select * from Art order by created desc limit 10")
+      self.render_ascii( title, art , error, arts )
 
 class BlogHandler( Handler ):
   def render_blog(self, blog_id = "" ):
@@ -202,17 +232,13 @@ class SignUpHandler( Handler ):
     self.render( "signup.html", **kw )
 
   def get( self ):
-    # self.response.out.write( [ str(user.username) for user in User.all() ] )
     self.render_signup()
 
   def is_user_existed(self, username ):
       return bool(User.all().filter('username =', username).get())
 
   def post( self, username = "", password = "", verify = "", email = "", invalid_username = "", invalid_password = "", invalid_verify = "", invalid_email = "" ):
-    # self.response.headers['Content-Type'] = 'text/plain
-    # if user_id_hash and check_secure_val( user_id_hash ):
-    #   user_id = long( user_id_hash.split('|')[0] )
-    #   now_username = User.get_by_id( user_id ).username
+    
     user_username = self.request.get("username")
     user_email    = self.request.get("email")
     vUsername = valid_username( user_username )
@@ -239,8 +265,6 @@ class SignUpHandler( Handler ):
       new_user.put()
       secure_user_id = make_secure_val( str( new_user.key().id() ) )
       self.response.headers.add_header( 'Set-Cookie', 'user_id=%s' % secure_user_id )
-      # self.response.headers.add_header( 'Set-Cookie', 'user_id=%s;Path=/signup' % secure_user_id )
-      # self.response.headers.add_header( 'Set-Cookie', 'user_id=%s;Path=/welcome' % secure_user_id )
       self.redirect( "/welcome" )
 
 class LoginHandler( Handler ):
@@ -248,7 +272,6 @@ class LoginHandler( Handler ):
     self.render( "login.html", **kw )
   
   def get( self ):
-    # self.response.out.write( [ str(user.username) for user in User.all() ] )
     self.render_login()
 
   def post( self ):
@@ -267,10 +290,6 @@ class LoginHandler( Handler ):
   def login( self, in_username, in_password ):
     user = User.find_by_name( in_username )
     if not user: 
-      # new_user = User( username=in_username, password=make_pw_hash( in_username, in_password ), email="" )
-      # new_user.put()
-      # secure_user_id = make_secure_val( str( new_user.key().id() ) )
-      # self.response.headers.add_header( 'Set-Cookie', 'user_id=%s' % secure_user_id )
       self.render("login.html", invalid_login="invalid login")
     else:
       if check_valid_pw( in_username, in_password, user.password ):
@@ -279,13 +298,12 @@ class LoginHandler( Handler ):
         self.redirect( "/welcome" )
       else:
         self.render("login.html", invalid_login="invalid login")      
+
 class LogoutHandler( Handler ):
   def get( self ):
     if self.request.cookies.get('user_id'):
-      # self.response.delete_cookie('user_id')
       self.response.headers.add_header( 'Set-Cookie', 'user_id=;Path=/' )#self.response.set_cookie('user_id', 'value=', path='/')
     self.redirect("/signup")
-
 
 class WelcomeHandler( Handler ):
   def render_welcome( self, **kw ):
@@ -310,6 +328,7 @@ app = webapp2.WSGIApplication([
     ( '/', MainHandler ), 
     ( '/fizzbuzz', FizzBuzzHandler ),
     ( '/signup', SignUpHandler ),
+    ( '/ascii', AsciiHandler ),
     ( '/welcome', WelcomeHandler ),
     ( '/login', LoginHandler ),
     ( '/logout', LogoutHandler ),
