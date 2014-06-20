@@ -79,8 +79,6 @@ from google.appengine.ext import db
 
 IP_URL = "http://api.hostip.info/?ip="
 def get_coords(ip):
-  # ip = "4.2.2.2"
-  # ip = "23.24.209.41"
   url = IP_URL + ip
   content = None
   try:
@@ -197,8 +195,9 @@ class AsciiHandler( Handler ):
       self.render_ascii( title, art , error, arts )
 
 class BlogHandler( Handler ):
-  def render_blog(self, blog_id = "" ):
-    if blog_id == "":
+  def render_blog(self, **kw ):
+    blog_id = kw.get('blog_id')
+    if blog_id:
       blogs = db.GqlQuery( "select * from Blog order by created desc" ) 
       self.render( "blog.html", blogs = blogs )
     else:
