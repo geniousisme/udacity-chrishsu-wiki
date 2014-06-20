@@ -197,15 +197,20 @@ class AsciiHandler( Handler ):
 class BlogHandler( Handler ):
   def render_blog(self, **kw ):
     blog_id = kw.get('blog_id')
-    if blog_id:
+    if not blog_id:
       blogs = db.GqlQuery( "select * from Blog order by created desc" ) 
       self.render( "blog.html", blogs = blogs )
     else:
       blog = Blog.get_by_id( long( blog_id ) )
       self.render( "post.html", blog = blog )
 
-  def get(self, blog_id = ""):
-    self.render_blog( blog_id = blog_id )
+  def get(self, **kw):
+    blog_id, blog_in_json = [ kw.get('blog_id'), kw.get('.json') ]
+    if blog_id:
+      self.render_blog( blog_id = blog_id )
+    elif blog_in_json:
+      self.render_blog( blog_in_json = blog_in_json )
+
 
 class NewPostHandler( Handler ):
   def render_newpost(self, subject = "", content = "", error = "" ):
@@ -333,5 +338,7 @@ app = webapp2.WSGIApplication([
     ( '/logout', LogoutHandler ),
     ( '/blog', BlogHandler ),
     ( '/blog/(\d+)', BlogHandler ),
+    ( '/blog/(\d+).json', BlogHandler ),
+    ( '/blog/.json', BlogHandler ),
     ( '/blog/newpost', NewPostHandler )
 ], debug=True)
