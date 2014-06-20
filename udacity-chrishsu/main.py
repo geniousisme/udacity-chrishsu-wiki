@@ -155,8 +155,7 @@ class MainHandler( Handler ):
       self.write("You are the best forever !!!!")
     else:
       self.write("You have been here for %s times!" % visits)
-    # self.render_ascii()
-   
+  
   def post(self):
     title = self.request.get("title")
     art   = self.request.get("art")
