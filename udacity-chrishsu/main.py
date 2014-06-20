@@ -237,7 +237,6 @@ class SignUpHandler( Handler ):
       return bool(User.all().filter('username =', username).get())
 
   def post( self, username = "", password = "", verify = "", email = "", invalid_username = "", invalid_password = "", invalid_verify = "", invalid_email = "" ):
-    
     user_username = self.request.get("username")
     user_email    = self.request.get("email")
     vUsername = valid_username( user_username )
