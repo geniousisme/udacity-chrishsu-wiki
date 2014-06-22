@@ -22,7 +22,7 @@ import random
 import string
 import hashlib
 import hmac
-
+from time import gmtime, strftime
 ####################### validate the pw for the 
 
 SECRET = "lalalala"
@@ -75,6 +75,8 @@ def gmaps_img(points):
 
 import urllib2
 from xml.dom import minidom
+import json
+
 from google.appengine.ext import db
 
 IP_URL = "http://api.hostip.info/?ip="
@@ -195,22 +197,43 @@ class AsciiHandler( Handler ):
       self.render_ascii( title, art , error, arts )
 
 class BlogHandler( Handler ):
+  def date_formatter(self, datetime):
+    return datetime.strftime("%c")
+  
+  def blog_dict(self, blog_obj):
+    return dict( 
+                 subject=blog_obj.subject, 
+                 content=blog_obj.content, 
+                 created=self.date_formatter( blog_obj.created ), 
+                 last_modified=self.date_formatter( blog_obj.last_modified ) 
+                )
+
   def render_blog(self, **kw ):
-    blog_id = kw.get('blog_id')
-    if not blog_id:
-      blogs = db.GqlQuery( "select * from Blog order by created desc" ) 
-      self.render( "blog.html", blogs = blogs )
-    else:
-      blog = Blog.get_by_id( long( blog_id ) )
+    if kw.get('blog_id'):
+      blog = Blog.get_by_id( long( kw.get('blog_id') ) )
       self.render( "post.html", blog = blog )
-
-  def get(self, **kw):
-    blog_id, blog_in_json = [ kw.get('blog_id'), kw.get('.json') ]
-    if blog_id:
-      self.render_blog( blog_id = blog_id )
-    elif blog_in_json:
-      self.render_blog( blog_in_json = blog_in_json )
-
+    elif kw.get('one_blog_in_json') or kw.get('ten_blogs_in_json'):
+      self.response.headers['Content-Type'] = 'application/json; charset=UTF-8'
+      if kw.get('one_blog_in_json'):
+        blog = Blog.get_by_id( long( kw.get('one_blog_in_json').replace('.json','') ) )
+        self.response.out.write( json.dumps( self.blog_dict( blog ) ) ) 
+      elif kw.get('ten_blogs_in_json'):
+        blogs = db.GqlQuery( "select * from Blog order by created desc limit 10" )
+        blogs_dict = [ self.blog_dict( blog ) for blog in blogs ]
+        self.response.out.write( json.dumps( blogs_dict ) )
+    else:
+      blogs = db.GqlQuery( "select * from Blog order by created desc limit 10" ) 
+      self.render( "blog.html", blogs = blogs )
+  
+  def get(self, blog_params=""):
+    if blog_params.isdigit():
+      self.render_blog( blog_id = blog_params )
+    elif blog_params.find('.json') > 0: # single post in json format
+      self.render_blog( one_blog_in_json = blog_params )
+    elif blog_params.find('.json') == 0: # 10 blogs in json format
+      self.render_blog( ten_blogs_in_json = blog_params )
+    else:
+      self.render_blog()
 
 class NewPostHandler( Handler ):
   def render_newpost(self, subject = "", content = "", error = "" ):
@@ -239,7 +262,7 @@ class SignUpHandler( Handler ):
     self.render_signup()
 
   def is_user_existed(self, username ):
-      return bool(User.all().filter('username =', username).get())
+      return bool( User.all().filter('username =', username).get() )
 
   def post( self, username = "", password = "", verify = "", email = "", invalid_username = "", invalid_password = "", invalid_verify = "", invalid_email = "" ):
     
@@ -268,8 +291,8 @@ class SignUpHandler( Handler ):
       new_user = User( username=vUsername, password=make_pw_hash( vUsername, vPassword ), email=vEmail )
       new_user.put()
       secure_user_id = make_secure_val( str( new_user.key().id() ) )
-      self.response.headers.add_header( 'Set-Cookie', 'user_id=%s' % secure_user_id )
-      self.redirect( "/welcome" )
+      self.response.headers.add_header( 'Set-Cookie', 'user_id=%s;Path=/blog' % secure_user_id )
+      self.redirect( "/blog/welcome" )
 
 class LoginHandler( Handler ):
   def render_login( self, **kw ):
@@ -298,16 +321,16 @@ class LoginHandler( Handler ):
     else:
       if check_valid_pw( in_username, in_password, user.password ):
         secure_user_id = make_secure_val( str( User.find_by_name( in_username ).key().id() ) )
-        self.response.headers.add_header( 'Set-Cookie', 'user_id=%s' % secure_user_id )
-        self.redirect( "/welcome" )
+        self.response.headers.add_header( 'Set-Cookie', 'user_id=%s;Path=/blog' % secure_user_id )
+        self.redirect( "/blog/welcome" )
       else:
         self.render("login.html", invalid_login="invalid login")      
 
 class LogoutHandler( Handler ):
   def get( self ):
     if self.request.cookies.get('user_id'):
-      self.response.headers.add_header( 'Set-Cookie', 'user_id=;Path=/' )#self.response.set_cookie('user_id', 'value=', path='/')
-    self.redirect("/signup")
+      self.response.headers.add_header( 'Set-Cookie', 'user_id=;Path=/blog' )#self.response.set_cookie('user_id', 'value=', path='/')
+    self.redirect("/blog/signup")
 
 class WelcomeHandler( Handler ):
   def render_welcome( self, **kw ):
@@ -320,7 +343,7 @@ class WelcomeHandler( Handler ):
       self.render_welcome( username = User.get_by_id( user_id ).username )
     else:
       # self.redirect( "/signup" )
-      self.redirect( "/login" )
+      self.redirect( "/blog/login" )
 
 class FizzBuzzHandler( Handler ):
   def get( self ):
@@ -331,14 +354,13 @@ class FizzBuzzHandler( Handler ):
 app = webapp2.WSGIApplication([
     ( '/', MainHandler ), 
     ( '/fizzbuzz', FizzBuzzHandler ),
-    ( '/signup', SignUpHandler ),
     ( '/ascii', AsciiHandler ),
-    ( '/welcome', WelcomeHandler ),
-    ( '/login', LoginHandler ),
-    ( '/logout', LogoutHandler ),
     ( '/blog', BlogHandler ),
     ( '/blog/(\d+)', BlogHandler ),
-    ( '/blog/(\d+).json', BlogHandler ),
-    ( '/blog/.json', BlogHandler ),
+    ( '/blog/(\d*.json)', BlogHandler ),
+    ( '/blog/signup', SignUpHandler ),
+    ( '/blog/welcome', WelcomeHandler ),
+    ( '/blog/login', LoginHandler ),
+    ( '/blog/logout', LogoutHandler ),
     ( '/blog/newpost', NewPostHandler )
 ], debug=True)
