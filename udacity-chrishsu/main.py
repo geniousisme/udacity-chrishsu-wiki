@@ -223,8 +223,10 @@ class AsciiHandler( Handler ):
     
 
 class BlogHandler( Handler ):
-  memcache.set( 'blogs', time.time() )
-  memcache.set( 'post', 0 )
+  memcache.set( 'blogs_time', time.time() )
+  memcache.set( 'blogs', db.GqlQuery( "select * from Blog order by created desc limit 10" ) )
+  memcache.set( 'post', Blog.get_by_id( long( kw.get('blog_id') ) ) )
+  memcache.set( 'post_time', 0 )
 
   def date_formatter(self, datetime):
     return datetime.strftime("%c")
@@ -240,9 +242,10 @@ class BlogHandler( Handler ):
   def render_blog(self, **kw ):
     if kw.get('blog_id'):
       blog = Blog.get_by_id( long( kw.get('blog_id') ) )
-      if memcache.Client().gets('post')[0] == 0:
-        memcache.Client().cas( 'post', time.time(), memcache.Client().gets('post')[1] )
-      self.render( "post.html", blog = blog, queried_time = time.time() - memcache.get('post') )
+      if memcache.get('post_time') == 0:
+        memcache.set( 'post_time', time.time() )
+        # memcache.Client().cas( 'post', time.time(), memcache.Client().gets('post')[1] )
+      self.render( "post.html", blog = blog, queried_time = time.time() - memcache.get('post_time') )
     elif kw.get('one_blog_in_json') or kw.get('ten_blogs_in_json'):
       self.response.headers['Content-Type'] = 'application/json; charset=UTF-8'
       if kw.get('one_blog_in_json'):
@@ -253,9 +256,11 @@ class BlogHandler( Handler ):
         blogs_dict = [ self.blog_dict( blog ) for blog in blogs ]
         self.response.out.write( json.dumps( blogs_dict ) )
     else:
-      blogs = db.GqlQuery( "select * from Blog order by created desc limit 10" ) 
-      if memcache.Client().cas( 'post', 0, memcache.Client().gets('post')[1] ):
-        self.render( "blog.html", blogs = blogs, queried_time = time.time() - memcache.get('blogs') )
+      blogs = memcache.get('blogs')
+      # blogs = db.GqlQuery( "select * from Blog order by created desc limit 10" ) 
+      # if memcache.Client().cas( 'post', 0, memcache.Client().gets('post')[1] ):
+      if blogs:
+        self.render( "blog.html", blogs = blogs, queried_time = time.time() - memcache.get('blogs_time') )
       else:
         self.response.out.write('404. There is some errors at Client().cas of post.')
 
@@ -283,10 +288,10 @@ class NewPostHandler( Handler ):
     if subject and content:
       newpost = Blog( subject = subject, content = content )
       newpost.put()
-      if memcache.Client().cas( 'blogs', time.time(), memcache.Client().gets('blogs')[1] ):
-        self.redirect( "/blog/" + str( newpost.key().id() ) )
-      else:
-        self.response.out.write('404, the Client().cas mechanism has some problems.')
+      memcache.set('blogs', db.GqlQuery( "select * from Blog order by created desc limit 10" ) )
+      memcache.set('blogs_time', time.time())
+      memcache.set('post_time', 0)
+      self.redirect( "/blog/" + str( newpost.key().id() ) )
     else:
       error = "We need both subject and content for blog !!"
       self.render_newpost( subject, content, error )
