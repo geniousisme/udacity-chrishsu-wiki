@@ -22,6 +22,8 @@ import random
 import string
 import hashlib
 import hmac
+import logging
+import time
 from time import gmtime, strftime
 ####################### validate the pw for the 
 
@@ -78,6 +80,7 @@ from xml.dom import minidom
 import json
 
 from google.appengine.ext import db
+from google.appengine.api import memcache
 
 IP_URL = "http://api.hostip.info/?ip="
 def get_coords(ip):
@@ -168,18 +171,35 @@ class MainHandler( Handler ):
       error = "We need both a title and some artwork!!!"
       self.render_ascii( title, art , error )
 
+# CACHE = {}
 class AsciiHandler( Handler ):
   def render_ascii(self, **kw):
     # arts = db.GqlQuery("select * from Art where ancestor is :1 order by created desc limit 10")
     self.render( "ascii.html", **kw )
+  
+  def top_arts( self, update=False ):
+    key = "top"
+    arts = memcache.get(key)
+    if arts is None or update:
+      logging.error("DB QUERY")
+      arts = list( db.GqlQuery("select * from Art order by created desc limit 10") )
+      memcache.set(key, arts)
+    # if not update and key in CACHE:
+    #   arts = CACHE[ key ]
+    # else:
+    #   logging.error("DB QUERY")
+    #   arts = list( db.GqlQuery("select * from Art order by created desc limit 10") ) # actually , when the result is a cursor , if you cal it once, the cursor will query db again!
+    #   #so store the info in a list will make the website better
+    #   CACHE[ key ] = arts
+    return arts 
 
   def get( self ):
     # self.write( repr( get_coords( self.request.remote_addr ) ) )
-    arts = list( db.GqlQuery("select * from Art order by created desc limit 10") )# actually , when the result is a cursor , if you cal it once, the cursor will 
-    # self.response.out.write( arts )
+    arts = self.top_arts()
     coords = filter( None, ( art.coords for art in arts ) )
     # self.response.out.write( coords )
     img_url = coords and gmaps_img( coords )
+    # self.response.out.write( [art.title for art in arts] )
     self.render_ascii( arts=arts, img_url=img_url )
 
   def post( self ):
@@ -190,13 +210,22 @@ class AsciiHandler( Handler ):
       coords  = get_coords( self.request.remote_addr )
       new_art.coords = coords and coords 
       new_art.put()
+      top_arts(True)
+      # CACHE.clear()
       self.redirect("/ascii")
     else:
       error = "We need both a title and some artwork!!!"
       arts = db.GqlQuery("select * from Art order by created desc limit 10")
       self.render_ascii( title, art , error, arts )
 
+# def Client().cas_get(key):
+#   return ( memcache.get(key), memcache. )
+    
+
 class BlogHandler( Handler ):
+  memcache.set( 'blogs', time.time() )
+  memcache.set( 'post', 0 )
+
   def date_formatter(self, datetime):
     return datetime.strftime("%c")
   
@@ -211,7 +240,9 @@ class BlogHandler( Handler ):
   def render_blog(self, **kw ):
     if kw.get('blog_id'):
       blog = Blog.get_by_id( long( kw.get('blog_id') ) )
-      self.render( "post.html", blog = blog )
+      if memcache.Client().gets('post')[0] == 0:
+        memcache.Client().cas( 'post', time.time(), memcache.Client().gets('post')[1] )
+      self.render( "post.html", blog = blog, queried_time = time.time() - memcache.get('post') )
     elif kw.get('one_blog_in_json') or kw.get('ten_blogs_in_json'):
       self.response.headers['Content-Type'] = 'application/json; charset=UTF-8'
       if kw.get('one_blog_in_json'):
@@ -223,8 +254,11 @@ class BlogHandler( Handler ):
         self.response.out.write( json.dumps( blogs_dict ) )
     else:
       blogs = db.GqlQuery( "select * from Blog order by created desc limit 10" ) 
-      self.render( "blog.html", blogs = blogs )
-  
+      if memcache.Client().cas( 'post', 0, memcache.Client().gets('post')[1] ):
+        self.render( "blog.html", blogs = blogs, queried_time = time.time() - memcache.get('blogs') )
+      else:
+        self.response.out.write('404. There is some errors at Client().cas of post.')
+
   def get(self, blog_params=""):
     if blog_params.isdigit():
       self.render_blog( blog_id = blog_params )
@@ -249,7 +283,10 @@ class NewPostHandler( Handler ):
     if subject and content:
       newpost = Blog( subject = subject, content = content )
       newpost.put()
-      self.redirect( "/blog/" + str( newpost.key().id() ) )
+      if memcache.Client().cas( 'blogs', time.time(), memcache.Client().gets('blogs')[1] ):
+        self.redirect( "/blog/" + str( newpost.key().id() ) )
+      else:
+        self.response.out.write('404, the Client().cas mechanism has some problems.')
     else:
       error = "We need both subject and content for blog !!"
       self.render_newpost( subject, content, error )

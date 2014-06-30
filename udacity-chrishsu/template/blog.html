@@ -15,6 +15,9 @@
     <div class="post-content">
       {{ blog.content | safe }}
     </div>
+    <div class="queried-time">
+       {{ blog.created.strftime("%b %d, %Y") }}
+    </div>
   </div>
   <br><br>
   {% endfor %}
