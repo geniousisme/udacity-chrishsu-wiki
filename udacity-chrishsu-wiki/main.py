@@ -174,7 +174,7 @@ class EditPage(Handler):
       self.response.out.write( os.environ['PATH_INFO'] )
       wiki = Wiki.last( wiki_subject )
       if wiki:
-        self.render( "wiki_edit.html", subject=self.wiki_subject( os.environ['PATH_INFO'] ), content=wiki.content )
+        self.render( "wiki_edit.html", content=wiki.content )
       else:
         self.render( "wiki_edit.html", subject="", content="" )
 
