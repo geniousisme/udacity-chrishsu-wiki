@@ -225,8 +225,8 @@ class AsciiHandler( Handler ):
 class BlogHandler( Handler ):
   memcache.set( 'blogs_time', time.time() )
   memcache.set( 'blogs', db.GqlQuery( "select * from Blog order by created desc limit 10" ) )
-  memcache.set( 'post', Blog.get_by_id( long( kw.get('blog_id') ) ) )
-  memcache.set( 'post_time', 0 )
+  memcache.set( 'post', None )
+  memcache.set( 'post_time', None )
 
   def date_formatter(self, datetime):
     return datetime.strftime("%c")
@@ -239,13 +239,23 @@ class BlogHandler( Handler ):
                  last_modified=self.date_formatter( blog_obj.last_modified ) 
                 )
 
+  def reset_post_cache( self, post_time=None, post=None ):
+    memcache.set( "post_time", post_time )
+    memcache.set( 'post', post )
+
+  def reset_blogs_cache( self, blogs_time=time.time(), blogs=db.GqlQuery( "select * from Blog order by created desc limit 10" ) ):
+    memcache.set( "blogs_time", blogs_time )
+    memcache.set( "blogs", blogs )    
+
   def render_blog(self, **kw ):
     if kw.get('blog_id'):
-      blog = Blog.get_by_id( long( kw.get('blog_id') ) )
-      if memcache.get('post_time') == 0:
-        memcache.set( 'post_time', time.time() )
+      # blog = memcache.get('post')
+      if not ( memcache.get('post_time') and memcache.get('post') ):
+        self.reset_post_cache( time.time(), Blog.get_by_id( long( kw.get('blog_id') ) ) )
+        # memcache.set( 'post_time', time.time() )
+        # memcache.set( 'post', Blog.get_by_id( long( kw.get('blog_id') ) ) )
         # memcache.Client().cas( 'post', time.time(), memcache.Client().gets('post')[1] )
-      self.render( "post.html", blog = blog, queried_time = time.time() - memcache.get('post_time') )
+      self.render( "post.html", blog = memcache.get('post'), queried_time = round( time.time() - memcache.get('post_time') ) )
     elif kw.get('one_blog_in_json') or kw.get('ten_blogs_in_json'):
       self.response.headers['Content-Type'] = 'application/json; charset=UTF-8'
       if kw.get('one_blog_in_json'):
@@ -257,12 +267,17 @@ class BlogHandler( Handler ):
         self.response.out.write( json.dumps( blogs_dict ) )
     else:
       blogs = memcache.get('blogs')
-      # blogs = db.GqlQuery( "select * from Blog order by created desc limit 10" ) 
-      # if memcache.Client().cas( 'post', 0, memcache.Client().gets('post')[1] ):
       if blogs:
-        self.render( "blog.html", blogs = blogs, queried_time = time.time() - memcache.get('blogs_time') )
-      else:
-        self.response.out.write('404. There is some errors at Client().cas of post.')
+        self.reset_post_cache()
+        self.render( "blog.html", blogs = blogs, queried_time = round( time.time() - memcache.get('blogs_time') ) )
+  
+  def flush_cache(self):
+    self.reset_blogs_cache( time.time() )
+    self.reset_post_cache()
+    # memcache.set( 'blogs', db.GqlQuery( "select * from Blog order by created desc limit 10" ) )
+    # memcache.set( 'blogs_time', time.time() )
+    # memcache.set( 'post', None )
+    # memcache.set( 'post_time', None )
 
   def get(self, blog_params=""):
     if blog_params.isdigit():
@@ -272,7 +287,15 @@ class BlogHandler( Handler ):
     elif blog_params.find('.json') == 0: # 10 blogs in json format
       self.render_blog( ten_blogs_in_json = blog_params )
     else:
+      if blog_params == "flush":
+        self.flush_cache()
+        self.redirect("/blog")
       self.render_blog()
+
+class FlushHandler( Handler ):
+  def get( self, **kw ):
+    self.flush_cache()
+    self.redirect("/blog/")
 
 class NewPostHandler( Handler ):
   def render_newpost(self, subject = "", content = "", error = "" ):
@@ -398,6 +421,7 @@ app = webapp2.WSGIApplication([
     ( '/fizzbuzz', FizzBuzzHandler ),
     ( '/ascii', AsciiHandler ),
     ( '/blog', BlogHandler ),
+    ( '/blog/(flush)', BlogHandler ),
     ( '/blog/(\d+)', BlogHandler ),
     ( '/blog/(\d*.json)', BlogHandler ),
     ( '/blog/signup', SignUpHandler ),
