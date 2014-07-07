@@ -12,9 +12,9 @@
 
   <div class="edit-area">
     {% if user %}
-      <a class="edit-link" href="/login">edit</a>
+      <a class="edit-link" href="/_edit{{ subject }}">edit</a>
       |
-      <a class="edit-link" href="/signup">history</a>
+      <a class="edit-link" href="/_history{{ subject }}">history</a>
     {% endif %}
   </div>
   <div class="login-area">

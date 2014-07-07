@@ -30,16 +30,23 @@ from google.appengine.api import memcache
 sys.path.extend( [ 
                    os.path.join(os.path.dirname(__file__), 'lib'),
                    os.path.join(os.path.dirname(__file__), 'lib/DB'),
-                   os.path.join(os.path.dirname(__file__), 'util') 
+                   os.path.join(os.path.dirname(__file__), 'utils') 
                   ] )
+
+logging.error(sys.path)
 ###### some modules ######
 import secure_helpers
 import valid_helpers
 import auth_helpers
 
+####### useful functions ######
+import utils
+
 ####### datastore ########
 from User import User
 from Wiki import Wiki
+
+
 
 template_dir = os.path.join( os.path.dirname(__file__), "template" )
 jinja_env = jinja2.Environment( loader = jinja2.FileSystemLoader( template_dir ), autoescape = True )
@@ -73,10 +80,15 @@ class Handler(webapp2.RequestHandler):
   def logout(self):
       self.response.headers.add_header('Set-Cookie', 'user_id=; Path=/')
 
+  def last_page(self, path):
+      self.set_secure_cookie('last_page', str(path))    
+
   def initialize(self, *a, **kw):
       webapp2.RequestHandler.initialize( self, *a, **kw )
       uid = self.read_secure_cookie('user_id')
+      page = self.read_secure_cookie('last_page')
       self.user = uid and User.by_id(int(uid))
+      self.prepage = page and page
 
 class MainHandler(Handler):
   def get(self):
@@ -143,7 +155,10 @@ class Login(Handler):
       u = User.login(username, password)
       if u:
         self.login(u)
-        self.redirect('/')
+        if self.prepage:
+          self.redirect( self.prepage )
+        else:
+          self.redirect('/')
       else:
         msg = 'Invalid login'
         self.render('login.html', error = msg)
@@ -151,43 +166,57 @@ class Login(Handler):
 class Logout(Handler):
   def get(self):
       self.logout()
-      self.redirect('/')
+      if self.prepage:
+        self.redirect( self.prepage )
+      else:
+        self.redirect('/')
 
 class WikiPage(Handler):
+  def escape_blank(self, text):
+      return text.replace('\n', '<br>')
+
   def get(self, wiki_subject=""):
+
       logging.error( "########################" + wiki_subject)
-      logging.error( "!!!!!!!!!!!!!!!!!!!" + str(Wiki.all().order('-created').get().content ) )
-      self.response.out.write(wiki_subject)
+      logging.error( "!!!!!!!!!!!!!!!!!!!" + str(Wiki.all().order('-created').get() ) )
+      # self.response.out.write(wiki_subject)
       wiki = Wiki.last(wiki_subject)
       if wiki:
-        self.render("wiki.html", content=wiki.content)
+        self.last_page( utils.current_path() )
+        self.render( "wiki.html",subject=wiki.subject, content=self.escape_blank( wiki.content ) )
       else:
         logging.error( "######################## not existed" )
         self.redirect("/_edit" + wiki_subject) 
 
 class EditPage(Handler):
-  def wiki_subject(self, url):
-      subject = url.replace('/_edit/','')
-      return subject if subject != '' else ' '
-
   def get(self, wiki_subject=""):
-      self.response.out.write( os.environ['PATH_INFO'] )
-      wiki = Wiki.last( wiki_subject )
-      if wiki:
-        self.render( "wiki_edit.html", content=wiki.content )
+      if self.user:
+        wiki = Wiki.last( wiki_subject )
+        if wiki:
+          self.render( "wiki_edit.html", content=wiki.content )
+        else:
+          self.render( "wiki_edit.html", subject="", content="" )
       else:
-        self.render( "wiki_edit.html", subject="", content="" )
+        self.last_page( utils.current_path() )
+        self.redirect('/login')
 
   def post(self, wiki_subject=""):
-      logging.error( "########################" + wiki_subject )
-      subject = wiki_subject
-      # subject = self.request.get('subject')
-      content = self.request.get('content')
+      if self.user:
+        logging.error( "########################" + wiki_subject )
+        subject = wiki_subject
+        # subject = self.request.get('subject')
+        content = self.request.get('content')
+        if subject and content:
+          new_wiki = Wiki.create( subject, content )
+          new_wiki.put()
+          logging.error( "########################" + subject )
+          self.redirect( subject )
+        else:
+          msg = "need some contents, man."
+          self.render( "wiki_edit.html", error=msg )
+      else:
+        self.redirect('/login')
 
-      new_wiki = Wiki.create( subject, content )
-      new_wiki.put()
-      logging.error( "########################" + subject )
-      self.redirect( subject )
 ##### url mapping #####
 PAGE_RE = r'(/(?:[a-zA-Z0-9_-]+/?)*)'
 app = webapp2.WSGIApplication([

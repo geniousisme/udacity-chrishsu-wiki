@@ -2,7 +2,7 @@
 {% block content %}
     <div class="wiki">
       <div class="wiki-content">
-        {{ content }}
+        {{ content | safe }}
       </div>
     </div>
 {% endblock %}

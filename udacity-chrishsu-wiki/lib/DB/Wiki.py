@@ -5,8 +5,12 @@ def wikis_key(group = 'default'):
 
 class Wiki(db.Model):
   subject = db.StringProperty(required = True)
-  content = db.StringProperty(required = True)
+  content = db.TextProperty(required = True)
   created = db.DateTimeProperty( auto_now_add = True )
+
+  def render( self ):
+      self._render_text = self.content.replace('\n', '<br>')
+      return render_str("wiki.html", p = self)
 
   @classmethod
   def create(cls, subject, content):
