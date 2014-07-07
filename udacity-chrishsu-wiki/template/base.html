@@ -15,6 +15,8 @@
       <a class="edit-link" href="/_edit{{ subject }}">edit</a>
       |
       <a class="edit-link" href="/_history{{ subject }}">history</a>
+    {% else %}
+      <a class="edit-link" href="/_history{{ subject }}">history</a>
     {% endif %}
   </div>
   <div class="login-area">
