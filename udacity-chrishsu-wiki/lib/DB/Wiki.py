@@ -17,11 +17,11 @@ class Wiki(db.Model):
       return Wiki( parent = wikis_key(), subject  = subject, content = content )
 
   @classmethod
-  def by_subject(cls, subject):
-      w = Wiki.all().filter('subject =', subject).get()
+  def by_subject_all(cls, subject):
+      w = Wiki.all().filter('subject =', subject).order('-created')
       return w
 
   @classmethod
-  def last(cls, subject):
-      w = Wiki.all().order('-created').filter('subject =', subject).get()
+  def by_subject_last(cls, subject):
+      w = Wiki.by_subject_all( subject ).get()
       return w and w

@@ -1,0 +1,26 @@
+{% extends  "base.html" %}
+{% block content %}
+
+<table>
+  {% for wiki in wikis %}
+    <tr>
+      <td class="label history-content">
+        {{ wiki.created.strftime('%c') }}
+      </td>
+      <td class="history-content">
+        <div>{{ wiki.content | escape }}</div>  
+      </td>
+      <td class="error">
+        <div class="history-area">
+          <a class="edit-link" href="/_edit{{ subject }}">view</a>
+          &nbsp;
+        {% if user %}
+          <a class="edit-link" href="/_edit{{ subject }}">edit</a>
+        {% endif %}
+        </div>
+      </td>
+    </tr>
+  {% endfor %}
+</table>
+
+{% endblock %}

@@ -38,6 +38,17 @@ body {
     right: 150px;
 }
 
+.history-area{
+    font-size: 13px;
+    color: gray;
+}
+
+.history-content{
+    font-size: 13px;
+    font-family: sans-serif;
+}
+
+
 .edit-link {
     color: gray;
     text-decoration: none;
@@ -73,13 +84,6 @@ label + label {
     margin-top: 20px;
 }
 
-/*input[type=text] {
-    width: 500px;
-    font-size: 20px;
-    padding: 2px;
-    font-family: monospace;
-}
-*/
 textarea {
   width: 500px;
   height: 400px;

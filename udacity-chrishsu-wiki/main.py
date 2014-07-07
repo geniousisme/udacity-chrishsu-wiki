@@ -20,9 +20,6 @@ import sys
 import os
 import re
 import logging
-import time
-
-from time import gmtime, strftime
 
 # from google.appengine.ext import db
 from google.appengine.api import memcache
@@ -33,7 +30,6 @@ sys.path.extend( [
                    os.path.join(os.path.dirname(__file__), 'utils') 
                   ] )
 
-logging.error(sys.path)
 ###### some modules ######
 import secure_helpers
 import valid_helpers
@@ -89,10 +85,6 @@ class Handler(webapp2.RequestHandler):
       page = self.read_secure_cookie('last_page')
       self.user = uid and User.by_id(int(uid))
       self.prepage = page and page
-
-class MainHandler(Handler):
-  def get(self):
-      self.render("wiki.html")
 
 class Signup(Handler):
   def get(self):
@@ -177,21 +169,21 @@ class WikiPage(Handler):
 
   def get(self, wiki_subject=""):
 
-      logging.error( "########################" + wiki_subject)
-      logging.error( "!!!!!!!!!!!!!!!!!!!" + str(Wiki.all().order('-created').get() ) )
+      # logging.error( "########################" + wiki_subject)
+      # logging.error( "!!!!!!!!!!!!!!!!!!!" + str(Wiki.all().order('-created').get() ) )
       # self.response.out.write(wiki_subject)
-      wiki = Wiki.last(wiki_subject)
+      wiki = Wiki.by_subject_last( wiki_subject )
       if wiki:
         self.last_page( utils.current_path() )
         self.render( "wiki.html",subject=wiki.subject, content=self.escape_blank( wiki.content ) )
       else:
-        logging.error( "######################## not existed" )
+        # logging.error( "######################## not existed" )
         self.redirect("/_edit" + wiki_subject) 
-
+  
 class EditPage(Handler):
   def get(self, wiki_subject=""):
       if self.user:
-        wiki = Wiki.last( wiki_subject )
+        wiki = Wiki.by_subject_last( wiki_subject )
         if wiki:
           self.render( "wiki_edit.html", content=wiki.content )
         else:
@@ -202,20 +194,35 @@ class EditPage(Handler):
 
   def post(self, wiki_subject=""):
       if self.user:
-        logging.error( "########################" + wiki_subject )
+        # logging.error( "########################" + wiki_subject )
         subject = wiki_subject
         # subject = self.request.get('subject')
         content = self.request.get('content')
         if subject and content:
           new_wiki = Wiki.create( subject, content )
           new_wiki.put()
-          logging.error( "########################" + subject )
+          # logging.error( "########################" + subject )
           self.redirect( subject )
         else:
           msg = "need some contents, man."
           self.render( "wiki_edit.html", error=msg )
       else:
         self.redirect('/login')
+
+class HistoryPage(Handler):
+  def datetime_formmatter( self, wiki ):
+    wiki.created =  utils.history_datetime( wiki.created )
+
+  def get(self, wiki_subject=""):
+    wikis = Wiki.by_subject_all( wiki_subject )
+    logging.error( wikis )
+    if wikis:
+      # wikis = map( lambda w : self.datetime_formmatter( w ), wikis  )
+      self.render('wiki_history.html', wikis=wikis)
+    else:
+      self.redirect( '/_edit' + wiki_subject )
+
+
 
 ##### url mapping #####
 PAGE_RE = r'(/(?:[a-zA-Z0-9_-]+/?)*)'
@@ -224,5 +231,6 @@ app = webapp2.WSGIApplication([
     ('/logout', Logout),
     ('/signup', Register),
     ('/_edit' + PAGE_RE, EditPage),
+    ('/_history' + PAGE_RE, HistoryPage),
     (PAGE_RE, WikiPage),  
 ], debug=True)
